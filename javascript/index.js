@@ -3,9 +3,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const stackedContainer = document.querySelector('.stacked-images-container');
     const videoTextFrame = document.getElementById('videoTextFrame');
     let highestZIndex = 10;
-    let lowestZIndex = 1;
-    let isAnimating = false;
-    let animationInterval = null;
+    let currentZIndex = 100;
+    let isDraggingStacked = false;
 
     // Map data-index to text
     const imageTexts = {
@@ -108,28 +107,273 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Click effect - cycle through images on each click
-    stackedContainer.addEventListener('click', function() {
-        moveTopToBottom();
-    });
-
-    // Toggle between text frame and video container on dom.png click
-    const domImage = document.querySelector('.index-dom');
-    const videoContainer = document.querySelector('.video-container');
-    let showVideo = true; // Start with video visible
-
-    domImage.style.cursor = 'pointer';
-
-    domImage.addEventListener('click', function() {
-        showVideo = !showVideo;
-        
-        if (showVideo) {
-            videoTextFrame.style.display = 'none';
-            videoContainer.style.display = 'block';
-        } else {
-            videoTextFrame.style.display = 'block';
-            videoContainer.style.display = 'none';
+    // Click effect - cycle through images on each click (only if not dragging)
+    stackedContainer.addEventListener('click', function(e) {
+        if (!isDraggingStacked) {
+            moveTopToBottom();
         }
     });
-});
 
+    // Toggle between text frame and video container on toggle-video click
+    const toggleElement = document.querySelector('.toggle-video');
+    const videoContainer = document.querySelector('.video-container');
+    const videoTextFrameContainer = document.querySelector('.video-text-frame-container');
+    let showVideo = true; // Start with video visible
+
+    if (toggleElement) {
+        toggleElement.style.cursor = 'pointer';
+
+        toggleElement.addEventListener('click', function(e) {
+            // Don't toggle if we just dragged
+            if (!toggleElement.dataset.justDragged) {
+                showVideo = !showVideo;
+                
+                if (showVideo) {
+                    videoTextFrameContainer.classList.remove('show');
+                    videoContainer.style.display = 'block';
+                } else {
+                    videoTextFrameContainer.classList.add('show');
+                    videoContainer.style.display = 'none';
+                }
+            }
+            delete toggleElement.dataset.justDragged;
+        });
+    }
+
+    // Setup interact.js for dragging
+    if (typeof interact !== 'undefined') {
+        const container = document.querySelector('.index-container');
+        const containerRect = container.getBoundingClientRect();
+
+        // Make text cards draggable
+        const textCards = document.querySelectorAll('.text-card');
+        textCards.forEach(card => {
+            let initialLeft, initialTop;
+            
+            interact(card)
+                .draggable({
+                    listeners: {
+                        start(event) {
+                            currentZIndex++;
+                            event.target.style.zIndex = currentZIndex;
+                            // Convert to absolute positioning
+                            const rect = event.target.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            initialLeft = rect.left - containerRect.left;
+                            initialTop = rect.top - containerRect.top;
+                            event.target.style.position = 'absolute';
+                            event.target.style.left = `${initialLeft}px`;
+                            event.target.style.top = `${initialTop}px`;
+                            event.target.style.margin = '0';
+                            const currentX = parseFloat(event.target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(event.target.getAttribute('data-y')) || initialTop;
+                            event.target.setAttribute('data-x', currentX);
+                            event.target.setAttribute('data-y', currentY);
+                        },
+                        move(event) {
+                            const target = event.target;
+                            const currentX = parseFloat(target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(target.getAttribute('data-y')) || initialTop;
+                            const x = currentX + event.dx;
+                            const y = currentY + event.dy;
+                            
+                            // Constrain within container
+                            const containerRect = container.getBoundingClientRect();
+                            const targetRect = target.getBoundingClientRect();
+                            const maxX = containerRect.width - targetRect.width;
+                            const maxY = containerRect.height - targetRect.height;
+                            
+                            const constrainedX = Math.max(0, Math.min(x, maxX));
+                            const constrainedY = Math.max(0, Math.min(y, maxY));
+                            
+                            target.style.left = `${constrainedX}px`;
+                            target.style.top = `${constrainedY}px`;
+                            target.setAttribute('data-x', constrainedX);
+                            target.setAttribute('data-y', constrainedY);
+                        },
+                        end(event) {
+                            if (event.target.classList.contains('toggle-video')) {
+                                event.target.dataset.justDragged = 'true';
+                            }
+                        }
+                    },
+                    modifiers: [
+                        interact.modifiers.restrictRect({
+                            restriction: container,
+                            endOnly: true
+                        })
+                    ]
+                });
+        });
+
+        // Make video wrapper draggable
+        const videoWrapper = document.querySelector('.video-wrapper');
+        if (videoWrapper) {
+            let initialLeft, initialTop;
+            
+            interact(videoWrapper)
+                .draggable({
+                    listeners: {
+                        start(event) {
+                            currentZIndex++;
+                            event.target.style.zIndex = currentZIndex;
+                            // Convert to absolute positioning
+                            const rect = event.target.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            initialLeft = rect.left - containerRect.left;
+                            initialTop = rect.top - containerRect.top;
+                            event.target.style.position = 'absolute';
+                            event.target.style.left = `${initialLeft}px`;
+                            event.target.style.top = `${initialTop}px`;
+                            event.target.style.marginLeft = 'auto';
+                            const currentX = parseFloat(event.target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(event.target.getAttribute('data-y')) || initialTop;
+                            event.target.setAttribute('data-x', currentX);
+                            event.target.setAttribute('data-y', currentY);
+                        },
+                        move(event) {
+                            const target = event.target;
+                            const currentX = parseFloat(target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(target.getAttribute('data-y')) || initialTop;
+                            const x = currentX + event.dx;
+                            const y = currentY + event.dy;
+                            
+                            const containerRect = container.getBoundingClientRect();
+                            const targetRect = target.getBoundingClientRect();
+                            const maxX = containerRect.width - targetRect.width;
+                            const maxY = containerRect.height - targetRect.height;
+                            
+                            const constrainedX = Math.max(0, Math.min(x, maxX));
+                            const constrainedY = Math.max(0, Math.min(y, maxY));
+                            
+                            target.style.left = `${constrainedX}px`;
+                            target.style.top = `${constrainedY}px`;
+                            target.setAttribute('data-x', constrainedX);
+                            target.setAttribute('data-y', constrainedY);
+                        }
+                    },
+                    modifiers: [
+                        interact.modifiers.restrictRect({
+                            restriction: container,
+                            endOnly: true
+                        })
+                    ]
+                });
+        }
+
+        // Make video text frame container draggable
+        if (videoTextFrameContainer) {
+            let initialLeft, initialTop;
+            
+            interact(videoTextFrameContainer)
+                .draggable({
+                    listeners: {
+                        start(event) {
+                            currentZIndex++;
+                            event.target.style.zIndex = currentZIndex;
+                            // Convert to absolute positioning
+                            const rect = event.target.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            initialLeft = rect.left - containerRect.left;
+                            initialTop = rect.top - containerRect.top;
+                            event.target.style.position = 'absolute';
+                            event.target.style.left = `${initialLeft}px`;
+                            event.target.style.top = `${initialTop}px`;
+                            const currentX = parseFloat(event.target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(event.target.getAttribute('data-y')) || initialTop;
+                            event.target.setAttribute('data-x', currentX);
+                            event.target.setAttribute('data-y', currentY);
+                        },
+                        move(event) {
+                            const target = event.target;
+                            const currentX = parseFloat(target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(target.getAttribute('data-y')) || initialTop;
+                            const x = currentX + event.dx;
+                            const y = currentY + event.dy;
+                            
+                            const containerRect = container.getBoundingClientRect();
+                            const targetRect = target.getBoundingClientRect();
+                            const maxX = containerRect.width - targetRect.width;
+                            const maxY = containerRect.height - targetRect.height;
+                            
+                            const constrainedX = Math.max(0, Math.min(x, maxX));
+                            const constrainedY = Math.max(0, Math.min(y, maxY));
+                            
+                            target.style.left = `${constrainedX}px`;
+                            target.style.top = `${constrainedY}px`;
+                            target.setAttribute('data-x', constrainedX);
+                            target.setAttribute('data-y', constrainedY);
+                        }
+                    },
+                    modifiers: [
+                        interact.modifiers.restrictRect({
+                            restriction: container,
+                            endOnly: true
+                        })
+                    ]
+                });
+        }
+
+        // Make stacked images container draggable
+        if (stackedContainer) {
+            let initialLeft, initialTop;
+            
+            interact(stackedContainer)
+                .draggable({
+                    listeners: {
+                        start(event) {
+                            currentZIndex++;
+                            event.target.style.zIndex = currentZIndex;
+                            // Convert to absolute positioning
+                            const rect = event.target.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            initialLeft = rect.left - containerRect.left;
+                            initialTop = rect.top - containerRect.top;
+                            event.target.style.position = 'absolute';
+                            event.target.style.left = `${initialLeft}px`;
+                            event.target.style.top = `${initialTop}px`;
+                            const currentX = parseFloat(event.target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(event.target.getAttribute('data-y')) || initialTop;
+                            event.target.setAttribute('data-x', currentX);
+                            event.target.setAttribute('data-y', currentY);
+                            isDraggingStacked = true;
+                        },
+                        move(event) {
+                            const target = event.target;
+                            const currentX = parseFloat(target.getAttribute('data-x')) || initialLeft;
+                            const currentY = parseFloat(target.getAttribute('data-y')) || initialTop;
+                            const x = currentX + event.dx;
+                            const y = currentY + event.dy;
+                            
+                            const containerRect = container.getBoundingClientRect();
+                            const targetRect = target.getBoundingClientRect();
+                            const maxX = containerRect.width - targetRect.width;
+                            const maxY = containerRect.height - targetRect.height;
+                            
+                            const constrainedX = Math.max(0, Math.min(x, maxX));
+                            const constrainedY = Math.max(0, Math.min(y, maxY));
+                            
+                            target.style.left = `${constrainedX}px`;
+                            target.style.top = `${constrainedY}px`;
+                            target.setAttribute('data-x', constrainedX);
+                            target.setAttribute('data-y', constrainedY);
+                        },
+                        end(event) {
+                            setTimeout(() => {
+                                isDraggingStacked = false;
+                            }, 100);
+                        }
+                    },
+                    modifiers: [
+                        interact.modifiers.restrictRect({
+                            restriction: container,
+                            endOnly: true
+                        })
+                    ]
+                });
+        }
+
+        // Note: Individual stacked images are not draggable to preserve stacking behavior
+        // Only the container is draggable
+    }
+});
